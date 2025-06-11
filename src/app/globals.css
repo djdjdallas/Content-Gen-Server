@@ -1,5 +1,30 @@
 @import "tailwindcss";
 
+/* Form inputs */
+input[type="url"],
+input[type="text"],
+textarea {
+  @apply px-3 py-2 border border-gray-300 rounded-md;
+}
+
+/* Prose styles for documentation */
+.prose h3 {
+  @apply text-base font-semibold mt-4 mb-2;
+}
+
+.prose code {
+  @apply bg-gray-100 px-1 py-0.5 rounded text-sm;
+}
+
+.prose ul,
+.prose ol {
+  @apply ml-6 space-y-1;
+}
+
+.prose li {
+  @apply text-sm text-gray-700;
+}
+
 :root {
   --background: #ffffff;
   --foreground: #171717;
