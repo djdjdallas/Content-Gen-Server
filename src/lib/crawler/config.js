@@ -15,13 +15,57 @@ export const crawlerConfig = {
   userAgentRotation: true,
   userAgentCount: 5,
   
+  // Browser configuration
+  browser: {
+    enabled: true,
+    headless: true,
+    viewport: { width: 1366, height: 768 },
+    timeout: 60000,
+    maxBrowsers: 3,
+    browserIdleTime: 300000, // 5 minutes
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage'
+    ],
+    cloudflareBypass: {
+      enabled: true,
+      maxWaitTime: 30000,
+      retryDelay: 2000,
+      maxRetries: 2
+    }
+  },
+
+  // Auto-detection settings
+  autoDetection: {
+    useBrowserOnError: true,
+    errorCodes: [403, 503, 429],
+    cloudflareIndicators: [
+      'checking your browser',
+      'cloudflare',
+      'cf-browser-verification',
+      'cf-challenge',
+      'ray id'
+    ],
+    knownCloudflaredomains: [
+      'discord.com',
+      'reddit.com',
+      'medium.com',
+      'dev.to',
+      'hashnode.com',
+      'notion.so'
+    ]
+  },
+
   // Features
   features: {
     rateLimiting: true,
     userAgentRotation: true,
     browserHeaders: true,
     randomDelay: true,
-    domainThrottling: true
+    domainThrottling: true,
+    browserFallback: true,
+    cloudflareBypass: true
   },
   
   // Limits

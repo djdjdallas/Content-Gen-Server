@@ -1,16 +1,46 @@
 import { JSDOM } from 'jsdom';
 import { getBrowserHeaders } from './headers.js';
 import { enforceRateLimit, getRandomDelay, getDomainLimiter } from './rateLimiter.js';
+import { fetchPageWithBrowser, shouldUseBrowser, isDomainKnownToUseCloudflare } from './browserCrawler.js';
+import { getConfig } from './config.js';
 
 export async function fetchPage(url, options = {}) {
+  const config = getConfig();
   const {
     timeout = 30000,
     followRedirects = true,
     maxRedirects = 5,
     additionalHeaders = {},
-    randomDelay = true
+    randomDelay = true,
+    useBrowser = null, // null = auto-detect, true = force browser, false = force fetch
+    browserOptions = {},
+    forceRetry = false
   } = options;
 
+  // Determine if we should use browser mode
+  const shouldUseBrowserMode = 
+    useBrowser === true || 
+    (useBrowser === null && (
+      isDomainKnownToUseCloudflare(url) ||
+      (config.autoDetection.useBrowserOnError && forceRetry)
+    ));
+
+  // If explicitly requesting browser mode or auto-detected
+  if (shouldUseBrowserMode && config.browser.enabled) {
+    console.log(`Using browser mode for ${url}`);
+    return await fetchPageWithBrowser(url, {
+      timeout: browserOptions.timeout || config.browser.timeout,
+      browserOptions: {
+        headless: browserOptions.headless ?? config.browser.headless,
+        viewport: browserOptions.viewport || config.browser.viewport,
+        ...browserOptions
+      },
+      additionalHeaders,
+      randomDelay
+    });
+  }
+
+  // Standard fetch approach
   try {
     const urlObj = new URL(url);
     const domain = urlObj.hostname;
@@ -47,12 +77,31 @@ export async function fetchPage(url, options = {}) {
 
       clearTimeout(timeoutId);
 
+      const html = await response.text();
+      const contentType = response.headers.get('content-type') || '';
+
+      // Check if we should retry with browser due to Cloudflare
+      if (config.features.browserFallback && 
+          useBrowser !== false && 
+          config.browser.enabled &&
+          await shouldUseBrowser(response.status, html)) {
+        
+        console.log(`Detected Cloudflare challenge for ${url}, retrying with browser...`);
+        return await fetchPageWithBrowser(url, {
+          timeout: browserOptions.timeout || config.browser.timeout,
+          browserOptions: {
+            headless: browserOptions.headless ?? config.browser.headless,
+            viewport: browserOptions.viewport || config.browser.viewport,
+            ...browserOptions
+          },
+          additionalHeaders,
+          randomDelay
+        });
+      }
+
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-
-      const html = await response.text();
-      const contentType = response.headers.get('content-type') || '';
 
       return {
         success: true,
@@ -60,18 +109,39 @@ export async function fetchPage(url, options = {}) {
         status: response.status,
         headers: Object.fromEntries(response.headers.entries()),
         html,
-        contentType
+        contentType,
+        usedBrowser: false
       };
     } catch (error) {
       clearTimeout(timeoutId);
       throw error;
     }
   } catch (error) {
+    // If fetch fails and browser fallback is enabled, try browser mode
+    if (config.features.browserFallback && 
+        useBrowser !== false && 
+        config.browser.enabled &&
+        !shouldUseBrowserMode) {
+      
+      console.log(`Fetch failed for ${url}, retrying with browser...`);
+      return await fetchPageWithBrowser(url, {
+        timeout: browserOptions.timeout || config.browser.timeout,
+        browserOptions: {
+          headless: browserOptions.headless ?? config.browser.headless,
+          viewport: browserOptions.viewport || config.browser.viewport,
+          ...browserOptions
+        },
+        additionalHeaders,
+        randomDelay
+      });
+    }
+
     return {
       success: false,
       url,
       error: error.message,
-      errorType: error.name
+      errorType: error.name,
+      usedBrowser: false
     };
   }
 }
